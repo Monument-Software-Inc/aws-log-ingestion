@@ -3,11 +3,14 @@ service: newrelic-log-ingestion
 provider:
   name: aws
   runtime: python3.11
-  stage: production
+  stage: ${self:custom.stage}
   timeout: 30
+  logRetentionInDays: ${env:SLS_LOG_RETENTION_DAYS, 30}
+  memorySize: 128
+  region: ${opt:region, "us-east-2"}
 
-  # Uncomment this line to use your own IAM role
-  #role: arn:aws:iam::YourAccountNumber:role/YourIamRole
+  deploymentBucket:
+    name: mnmt-eng-infra-use2-prd-deployments
 
   environment:
     # Determines if logs are forwarded to New Relic Infrastructure
@@ -15,11 +18,13 @@ provider:
     # Your NewRelic license key
     LICENSE_KEY: ${env:LICENSE_KEY}
     # Determines if logs are forwarded to New Relic Logging
-    LOGGING_ENABLED: ${env:LOGGING_ENABLED, "False"}
+    LOGGING_ENABLED: ${env:LOGGING_ENABLED, "True"}
     # A boolean to determine if you want to output debug messages in the CloudWatch console
     DEBUG_LOGGING_ENABLED: ${env:DEBUG_LOGGING_ENABLED, "False"}
+    NR_LAMBDA_LOG_GROUP_PREFIX: ${env:NR_LAMBDA_LOG_GROUP_PREFIX, "/aws/lambda"}
 
 custom:
+  stage: ${opt:stage, env:SLS_STAGE, 'dev'}
   pythonRequirements:
     dockerizePip: true
     fileName: ./src/requirements.txt
@@ -27,16 +32,45 @@ custom:
 package:
   exclude:
     - ./**
-  include:
-
+  include:  
     - ./LICENSE
     - ./src/function.py
 
 functions:
-  newrelic-log-ingestion:
-    description: Send log data from CloudWatch Logs to New Relic Infrastructure (Cloud Integrations) and New Relic Logging.
+  sls-integrations-newrelic-log-ingestion-rds:
+    description: Send log data from CloudWatch Logs (RDS) to New Relic Infrastructure (Cloud Integrations) and New Relic Logging.
     handler: src/function.lambda_handler
-    name: newrelic-log-ingestion
+    name: sls-integrations-newrelic-log-ingestion-rds
+    role: arn:aws:iam::${aws:accountId}:role/mnmt-eng-use2-${self:custom.stage}-newrelic
+    environment:        
+      NR_LAMBDA_LOG_GROUP_PREFIX: "/aws/rds/cluster"
 
+  sls-integrations-newrelic-log-ingestion-lambda:
+    description: Send log data from CloudWatch Logs (Lambda) to New Relic Infrastructure (Cloud Integrations) and New Relic Logging.
+    handler: src/function.lambda_handler
+    name: sls-integrations-newrelic-log-ingestion-lambda
+    role: arn:aws:iam::${aws:accountId}:role/mnmt-eng-use2-${self:custom.stage}-newrelic
+    
 plugins:
+  - serverless-better-credentials # must be the first
   - serverless-python-requirements
+
+resources:
+  Resources:
+    LambdaInvokePermissionLambda:
+      Type: AWS::Lambda::Permission
+      Properties:
+        FunctionName: sls-integrations-newrelic-log-ingestion-lambda
+        Action: lambda:InvokeFunction
+        Principal: !Sub logs.${AWS::Region}.amazonaws.com
+        SourceArn: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*
+        SourceAccount: !Sub ${AWS::AccountId}
+    LambdaInvokePermissionRDS:
+      Type: AWS::Lambda::Permission
+      Properties:
+        FunctionName: sls-integrations-newrelic-log-ingestion-rds
+        Action: lambda:InvokeFunction
+        Principal: !Sub logs.${AWS::Region}.amazonaws.com
+        SourceArn: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*
+        SourceAccount: !Sub ${AWS::AccountId}
+    
