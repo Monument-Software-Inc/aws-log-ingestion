@@ -60,7 +60,7 @@ resources:
     LambdaInvokePermissionLambda:
       Type: AWS::Lambda::Permission
       Properties:
-        FunctionName: sls-integrations-newrelic-log-ingestion-lambda
+        FunctionName: { "Fn::GetAtt": [ "SlsDashintegrationsDashnewrelicDashlogDashingestionDashlambdaLambdaFunction", "Arn" ] } # sls-integrations-newrelic-log-ingestion-lambda
         Action: lambda:InvokeFunction
         Principal: !Sub logs.${AWS::Region}.amazonaws.com
         SourceArn: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*
@@ -68,7 +68,7 @@ resources:
     LambdaInvokePermissionRDS:
       Type: AWS::Lambda::Permission
       Properties:
-        FunctionName: sls-integrations-newrelic-log-ingestion-rds
+        FunctionName: { "Fn::GetAtt": [ "SlsDashintegrationsDashnewrelicDashlogDashingestionDashrdsLambdaFunction", "Arn" ] } # sls-integrations-newrelic-log-ingestion-rds
         Action: lambda:InvokeFunction
         Principal: !Sub logs.${AWS::Region}.amazonaws.com
         SourceArn: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*
